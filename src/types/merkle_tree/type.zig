@@ -1,17 +1,14 @@
 const std = @import("std");
 const utils = @import("../../utils.zig");
-
+const rm = @import("redismodule");
 const INIT_CAP: usize = 4;
 
-pub const TreeNode = struct {
-    index: usize,
-    node_hash: [32]u8,
-};
+pub var merkle_type: ?*rm.RedisModuleType = null;
 
 pub const MerkleTree = struct {
     root_hash: [32]u8,
     allocator: std.mem.Allocator,
-    nodes: std.ArrayList(TreeNode), // always even
+    nodes: std.ArrayList([32]u8),
     levels: std.ArrayList(std.ArrayList([32]u8)),
 
     const Self = @This();
@@ -31,22 +28,62 @@ pub const MerkleTree = struct {
         for (self.levels.items) |*level| {
             level.deinit(self.allocator);
         }
+        self.levels.deinit(self.allocator);
         self.nodes.deinit(self.allocator);
         self.allocator.destroy(self);
     }
 
-    pub fn get() void {}
-
-    pub fn insert(self: *Self) !void {
-        _ = self;
+    pub fn insert(self: *Self, node_hash: [32]u8) !void {
+        try self.nodes.append(self.allocator, node_hash);
+        try self.rebuild();
     }
 
-    pub fn delete(self: *Self) !void {
-        _ = self;
+    pub fn delete(self: *Self, node_hash: [32]u8) !void {
+        const hash_index = try self.find_index(node_hash);
+        _ = self.nodes.swapRemove(hash_index);
+        try self.rebuild();
     }
 
-    pub fn prove_inclusion(self: *Self) void {
-        _ = self;
+    pub fn get_proves(self: *Self, node_hash: [32]u8) !std.ArrayList([32]u8) {
+        if (self.levels.items.len == 1) {
+            return .empty;
+        }
+
+        const hash_index = try self.find_index(node_hash);
+        var proofs = try std.ArrayList([32]u8).initCapacity(
+            self.allocator,
+            self.levels.items.len - 1,
+        );
+
+        // Append siubling on same level
+        try proofs.append(self.allocator, self.levels.items[0].items[1]);
+
+        // Go to the root collecting siblings
+        var depth: usize = 1;
+        var prev_level_index = hash_index;
+        while (depth < self.levels.items.len - 1) {
+            const parent_index = (prev_level_index / 2);
+            const sibling_parent_index = if (parent_index % 2 == 0) (parent_index + 1) else (parent_index - 1);
+
+            try proofs.append(self.allocator, self.levels.items[depth].items[sibling_parent_index]);
+
+            prev_level_index = parent_index;
+            depth += 1;
+        }
+        return proofs;
+    }
+
+    fn find_index(self: *const Self, hash: [32]u8) !usize {
+        var i: usize = 0;
+        while (i < self.nodes.items.len) : (i += 1) {
+            if (std.mem.eql(u8, &self.nodes.items[i], &hash)) {
+                break;
+            }
+        }
+        if (i == self.nodes.items.len) {
+            return error.MerkleTreeItemNotFound;
+        }
+        return i;
     }
 
     pub fn rebuild(self: *Self) !void {
@@ -61,8 +98,8 @@ pub const MerkleTree = struct {
         }
         var level_zero: std.ArrayList([32]u8) = .empty;
         errdefer level_zero.deinit(self.allocator);
-        for (self.nodes.items) |node| {
-            try level_zero.append(self.allocator, node.node_hash);
+        for (self.nodes.items) |node_hash| {
+            try level_zero.append(self.allocator, node_hash);
         }
 
         try self.levels.append(self.allocator, level_zero);

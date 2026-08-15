@@ -1,15 +1,12 @@
 const std = @import("std");
 const rm = @import("redismodule");
-const some = @import("utils.zig").some;
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
-pub const SHA_HEX_LEN: c_int = 64;
-const INIT_CAP = 4;
-
-pub const RedisHashCollector = struct {
+pub const HashCollector = struct {
     allocator: std.mem.Allocator,
     buf: std.ArrayList(u8) = .empty,
     err: ?anyerror = null,
+    result_hash: [32]u8 = undefined,
 
     const Self = @This();
 
@@ -18,7 +15,6 @@ pub const RedisHashCollector = struct {
     ) !Self {
         return .{
             .allocator = allocator,
-            .buf = try std.ArrayList(u8).initCapacity(allocator, INIT_CAP),
         };
     }
 
@@ -26,19 +22,23 @@ pub const RedisHashCollector = struct {
         self.buf.deinit(self.allocator);
     }
 
-    pub fn generate_hex(self: *Self, hash_key: ?*rm.RedisModuleKey) ![SHA_HEX_LEN]u8 {
+    pub fn calcualte_hash(self: *Self, hash_key: ?*rm.RedisModuleKey) !void {
         self.buf.clearRetainingCapacity();
         self.err = null;
 
         try self.collect_all_entries(hash_key);
-        return sha256hex(self.buf);
+        self.calculate();
+    }
+
+    fn calculate(self: *Self) void {
+        Sha256.hash(self.buf.items, &self.result_hash, .{});
     }
 
     fn collect_all_entries(self: *Self, hash_key: ?*rm.RedisModuleKey) !void {
-        const cursor = some(rm.RedisModule_ScanCursorCreate)();
-        defer some(rm.RedisModule_ScanCursorDestroy)(cursor);
+        const cursor = rm.RedisModule_ScanCursorCreate.?();
+        defer rm.RedisModule_ScanCursorDestroy.?(cursor);
 
-        while (some(rm.RedisModule_ScanKey)(hash_key, cursor, get_hash_field_cb, self) != 0) {
+        while (rm.RedisModule_ScanKey.?(hash_key, cursor, get_hash_field_cb, self) != 0) {
             if (self.err) |err| {
                 return err;
             }
@@ -52,7 +52,7 @@ pub const RedisHashCollector = struct {
         const str = s orelse return;
         var len: usize = undefined;
 
-        const ptr = some(rm.RedisModule_StringPtrLen)(str, &len);
+        const ptr = rm.RedisModule_StringPtrLen.?(str, &len);
         try self.buf.appendSlice(self.allocator, ptr[0..len]);
     }
 };
@@ -63,7 +63,7 @@ fn get_hash_field_cb(
     value: ?*rm.RedisModuleString,
     privdata: ?*anyopaque,
 ) callconv(.c) void {
-    const c: *RedisHashCollector = @ptrCast(@alignCast(privdata.?));
+    const c: *HashCollector = @ptrCast(@alignCast(privdata.?));
     c.append_string(field) catch |e| {
         c.err = e;
         return;
@@ -72,11 +72,4 @@ fn get_hash_field_cb(
         c.err = e;
         return;
     };
-}
-
-pub fn sha256hex(buf: std.ArrayList(u8)) [SHA_HEX_LEN]u8 {
-    var out: [Sha256.digest_length]u8 = undefined;
-    Sha256.hash(buf.items, &out, .{});
-
-    return std.fmt.bytesToHex(out, .lower);
 }

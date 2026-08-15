@@ -1,14 +1,11 @@
 const std = @import("std");
-const t = @import("type.zig");
-const MerkleTree = t.MerkleTree;
-const TreeNode = t.TreeNode;
+const mt = @import("type.zig");
+const MerkleTree = mt.MerkleTree;
 const redis_allocator = @import("../../allocator.zig").redis_allocator;
 const rm = @import("redismodule");
 const utils = @import("../../utils.zig");
-const some = utils.some;
-const state = @import("../../state.zig");
 
-const HASH_LEN = std.crypto.hash.sha2.Sha256.digest_length;
+const HASH_LEN: usize = 32;
 
 fn freeValue(value: ?*anyopaque) callconv(.c) void {
     const tree: *MerkleTree = @ptrCast(@alignCast(value orelse return));
@@ -19,8 +16,7 @@ fn rdbSave(io: ?*rm.RedisModuleIO, value: ?*anyopaque) callconv(.c) void {
     const tree: *MerkleTree = @ptrCast(@alignCast(value.?));
     rm.RedisModule_SaveUnsigned.?(io, tree.nodes.items.len);
     for (tree.nodes.items) |*h| {
-        const node_hash = h.node_hash;
-        rm.RedisModule_SaveStringBuffer.?(io, &node_hash, node_hash.len);
+        rm.RedisModule_SaveStringBuffer.?(io, h, HASH_LEN);
     }
 }
 
@@ -34,7 +30,7 @@ fn memUsage(value: ?*const anyopaque) callconv(.c) usize {
 fn rdbLoad(io: ?*rm.RedisModuleIO, encver: c_int) callconv(.c) ?*anyopaque {
     if (encver != 0) return null;
 
-    var tree = t.MerkleTree.init(redis_allocator) catch return null;
+    var tree = mt.MerkleTree.init(redis_allocator) catch return null;
 
     const n = rm.RedisModule_LoadUnsigned.?(io);
     tree.nodes.ensureTotalCapacity(redis_allocator, n) catch return null;
@@ -45,9 +41,9 @@ fn rdbLoad(io: ?*rm.RedisModuleIO, encver: c_int) callconv(.c) ?*anyopaque {
         const buf = rm.RedisModule_LoadStringBuffer.?(io, &len);
         defer rm.RedisModule_Free.?(buf);
         if (len != 32) return null;
-        var node: TreeNode = .{ .index = i, .node_hash = undefined };
-        @memcpy(&node.node_hash, buf[0..32]);
-        tree.nodes.appendAssumeCapacity(node);
+        var node_hash: [32]u8 = undefined;
+        @memcpy(&node_hash, buf[0..32]);
+        tree.nodes.appendAssumeCapacity(node_hash);
     }
 
     tree.rebuild() catch return null;
@@ -57,21 +53,21 @@ fn rdbLoad(io: ?*rm.RedisModuleIO, encver: c_int) callconv(.c) ?*anyopaque {
 fn digest(md: ?*rm.RedisModuleDigest, value: ?*anyopaque) callconv(.c) void {
     const tree: *MerkleTree = @ptrCast(@alignCast(value.?));
     const root = tree.root_hash;
-    some(rm.RedisModule_DigestAddStringBuffer)(md, &root, root.len);
-    some(rm.RedisModule_DigestEndSequence)(md);
+    rm.RedisModule_DigestAddStringBuffer.?(md, &root, root.len);
+    rm.RedisModule_DigestEndSequence.?(md);
 }
 
 fn aofRewrite(aof: ?*rm.RedisModuleIO, key: ?*rm.RedisModuleString, value: ?*anyopaque) callconv(.c) void {
     const tree: *MerkleTree = @ptrCast(@alignCast(value orelse return));
 
-    for (tree.nodes.items) |*leaf| {
-        some(rm.RedisModule_EmitAOF)(
+    for (tree.nodes.items) |*node_hash| {
+        rm.RedisModule_EmitAOF.?(
             aof,
             "MERKLE.ADD",
             "sb",
             key,
-            leaf.node_hash[0..],
-            leaf.node_hash.len,
+            node_hash[0..],
+            HASH_LEN,
         );
     }
 }
@@ -87,8 +83,8 @@ pub fn register_merkle_tree_type(ctx: *rm.RedisModuleCtx) c_int {
     tm.aof_rewrite = aofRewrite;
     // tm.copy = copyValue;
 
-    state.merkle_type = some(rm.RedisModule_CreateDataType)(ctx, "mrkltree1", 0, &tm);
-    if (state.merkle_type == null) {
+    mt.merkle_type = rm.RedisModule_CreateDataType.?(ctx, "mrkeltree", 0, &tm);
+    if (mt.merkle_type == null) {
         return rm.REDISMODULE_ERR;
     }
 
