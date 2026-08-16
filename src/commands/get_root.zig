@@ -2,7 +2,7 @@ const std = @import("std");
 const rm = @import("redismodule");
 const utils = @import("../utils.zig");
 const Cmd = @import("command.zig").Cmd;
-const mt = @import("../types//merkle_tree/type.zig");
+const mt = @import("../types//merkle_tree/tree.zig");
 const MerkleTree = mt.MerkleTree;
 const hash_helpers = @import("../helpers/hash_collector.zig");
 
@@ -33,7 +33,10 @@ fn mt_get_root_cmd(ctx: ?*rm.RedisModuleCtx, argv: [*c]?*rm.RedisModuleString, a
             const tree: *MerkleTree = @ptrCast(@alignCast(rm.RedisModule_ModuleTypeGetValue.?(key)));
 
             const hex = std.fmt.bytesToHex(tree.root_hash, .upper);
-            return rm.RedisModule_ReplyWithString.?(ctx, rm.RedisModule_CreateString.?(ctx, &hex, hex.len));
+            const hex_string = rm.RedisModule_CreateString.?(ctx, &hex, hex.len);
+            defer rm.RedisModule_FreeString.?(ctx, hex_string);
+
+            return rm.RedisModule_ReplyWithString.?(ctx, hex_string);
         },
 
         else => return rm.RedisModule_ReplyWithError.?(ctx, rm.REDISMODULE_ERRORMSG_WRONGTYPE),

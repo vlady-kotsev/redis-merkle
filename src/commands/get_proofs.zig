@@ -2,8 +2,9 @@ const std = @import("std");
 const rm = @import("redismodule");
 const utils = @import("../utils.zig");
 const Cmd = @import("command.zig").Cmd;
-const mt = @import("../types//merkle_tree/type.zig");
+const mt = @import("../types//merkle_tree/tree.zig");
 const MerkleTree = mt.MerkleTree;
+const NodePos = mt.NodePos;
 const hash_helpers = @import("../helpers/hash_collector.zig");
 const HashCollector = @import("../helpers/hash_collector.zig").HashCollector;
 const redis_allocator = @import("../allocator.zig").redis_allocator;
@@ -46,13 +47,21 @@ fn mt_get_proofs_cmd(ctx: ?*rm.RedisModuleCtx, argv: [*c]?*rm.RedisModuleString,
                     defer hash_collector.deinit();
 
                     hash_collector.calcualte_hash(hash_key) catch return rm.RedisModule_ReplyWithError.?(ctx, "ERR failed to generate sha");
-                    const proofs = tree.get_proves(hash_collector.result_hash) catch return rm.RedisModule_ReplyWithError.?(ctx, "ERR failed to get proofs tree");
+                    const proofs = tree.get_proves(hash_collector.result_hash) catch return rm.RedisModule_ReplyWithNull.?(ctx);
 
-                    if (rm.RedisModule_ReplyWithArray.?(ctx, @intCast(proofs.items.len)) == rm.REDISMODULE_ERR) {
+                    if (rm.RedisModule_ReplyWithArray.?(ctx, @intCast(proofs.items.len * 2)) == rm.REDISMODULE_ERR) {
                         return rm.REDISMODULE_ERR;
                     }
                     for (proofs.items) |proof| {
-                        const hex = std.fmt.bytesToHex(proof, .upper);
+                        const pos: NodePos = @enumFromInt(proof[0]);
+                        if (pos == .Left) {
+                            const left_literal = "Left:";
+                            _ = rm.RedisModule_ReplyWithSimpleString.?(ctx, left_literal);
+                        } else if (pos == .Right) {
+                            const right_literal = "Right:";
+                            _ = rm.RedisModule_ReplyWithSimpleString.?(ctx, right_literal);
+                        }
+                        const hex = std.fmt.bytesToHex(proof[1..], .upper);
                         _ = rm.RedisModule_ReplyWithStringBuffer.?(ctx, &hex, hex.len);
                     }
                     return rm.REDISMODULE_OK;

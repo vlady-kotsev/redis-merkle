@@ -1,7 +1,7 @@
 const rm = @import("redismodule");
 const utils = @import("../utils.zig");
 const Cmd = @import("command.zig").Cmd;
-const mt = @import("../types/merkle_tree/type.zig");
+const mt = @import("../types/merkle_tree/tree.zig");
 const MerkleTree = mt.MerkleTree;
 const HashCollector = @import("../helpers/hash_collector.zig").HashCollector;
 const redis_allocator = @import("../allocator.zig").redis_allocator;
@@ -44,7 +44,7 @@ fn mt_delete_cmd(ctx: ?*rm.RedisModuleCtx, argv: [*c]?*rm.RedisModuleString, arg
                     defer hash_collector.deinit();
 
                     hash_collector.calcualte_hash(hash_key) catch return rm.RedisModule_ReplyWithError.?(ctx, "ERR failed to generate sha");
-                    tree.delete(hash_collector.result_hash) catch return rm.RedisModule_ReplyWithError.?(ctx, "ERR failed to delete from tree");
+                    tree.delete(hash_collector.result_hash) catch return rm.RedisModule_ReplyWithNull.?(ctx);
                     _ = rm.RedisModule_SignalModifiedKey.?(ctx, argv[1]);
 
                     if (tree.nodes.items.len == 0) {

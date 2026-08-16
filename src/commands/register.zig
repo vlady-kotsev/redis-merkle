@@ -7,6 +7,7 @@ const INSERT_CMD = @import("insert.zig").INSERT_CMD;
 const GET_ROOT_CMD = @import("get_root.zig").GET_ROOT_CMD;
 const DELETE_CMD = @import("delete.zig").DELETE_CMD;
 const PROOFS_CMD = @import("get_proofs.zig").GET_PROOFS_CMD;
+const GET_HASH_CMD = @import("get_hash.zig").GET_HASH_CMD;
 
 pub fn register_cmds(ctx: ?*rm.RedisModuleCtx) c_int {
     if (rm.RedisModule_CreateCommand.?(
@@ -53,6 +54,18 @@ pub fn register_cmds(ctx: ?*rm.RedisModuleCtx) c_int {
         PROOFS_CMD.first_key,
         PROOFS_CMD.last_key,
         PROOFS_CMD.step,
+    ) != rm.REDISMODULE_OK) {
+        return rm.REDISMODULE_ERR;
+    }
+
+    if (rm.RedisModule_CreateCommand.?(
+        ctx,
+        GET_HASH_CMD.name,
+        GET_HASH_CMD.cb,
+        GET_HASH_CMD.flags,
+        GET_HASH_CMD.first_key,
+        GET_HASH_CMD.last_key,
+        GET_HASH_CMD.step,
     ) != rm.REDISMODULE_OK) {
         return rm.REDISMODULE_ERR;
     }

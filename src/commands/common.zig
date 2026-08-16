@@ -1,5 +1,5 @@
 const rm = @import("redismodule");
-const mt = @import("../types//merkle_tree/type.zig");
+const mt = @import("../types//merkle_tree/tree.zig");
 const MerkleTree = mt.MerkleTree;
 
 const redis_allocator = @import("../allocator.zig").redis_allocator;
