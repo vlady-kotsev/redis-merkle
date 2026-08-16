@@ -1,5 +1,10 @@
 # redis-merkle
 
+<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/f3870f68-1eaf-4db1-9ac0-0f92923b5d3e" />
+<hr/>
+
+## Overview
+
 A Redis module, that maintains a SHA-256 Merkle tree over Redis hashes.
 
 Each leaf of the tree is the digest of a Redis hash key. Insert a hash into a tree and you get a
