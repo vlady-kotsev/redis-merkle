@@ -12,7 +12,7 @@ root commitment for the whole set (`MT.ROOT`), plus an inclusion proof for any m
 (`MT.PROOFS`), so a third party holding only the root can be convinced that a given record is part
 of the set.
 
-The tree lives in its own Redis key as a custom module data type (`mrkeltree`), and is persisted
+The tree lives in its own Redis key as a custom module data type (`mrkletree`), and is persisted
 via RDB.
 
 ## Requirements
@@ -74,7 +74,7 @@ Creates `tree-key` if it does not exist.
 
 - **Reply:** integer — the number of leaves in the tree after the insert.
 - **Reply:** Null if `hash-key` does not exist.
-- **Error:** `WRONGTYPE` if `tree-key` is not a `mrkeltree` or `hash-key` is not a hash.
+- **Error:** `WRONGTYPE` if `tree-key` is not a `mrkletree` or `hash-key` is not a hash.
 
 Two things to be aware of: duplicates are not detected, so inserting the same hash twice creates
 two identical leaves; and `tree-key` is created before `hash-key` is validated, so a call naming a

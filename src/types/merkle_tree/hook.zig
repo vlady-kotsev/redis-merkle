@@ -83,7 +83,7 @@ pub fn register_merkle_tree_type(ctx: *rm.RedisModuleCtx) c_int {
     tm.aof_rewrite = aofRewrite;
     // tm.copy = copyValue;
 
-    mt.merkle_type = rm.RedisModule_CreateDataType.?(ctx, "mrkeltree", 0, &tm);
+    mt.merkle_type = rm.RedisModule_CreateDataType.?(ctx, "mrkletree", 0, &tm);
     if (mt.merkle_type == null) {
         return rm.REDISMODULE_ERR;
     }
